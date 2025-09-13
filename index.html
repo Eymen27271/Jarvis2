@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jarvis Asistan</title>
+<style>
+  body { margin:0; background:#000; font-family:'Segoe UI',sans-serif; display:flex; flex-direction:column; height:100vh; }
+  #chat { flex:1; overflow-y:auto; padding:20px; }
+  #input-container { display:flex; padding:10px; background:#111; position:relative; }
+  #user-input { flex:1; padding:10px; border:none; background:#222; color:#0ff; }
+  #send-btn,#theme-btn,#voice-btn { padding:10px 15px; margin-left:5px; border:none; cursor:pointer; }
+  #send-btn { background:#0ff; color:#000; }
+  #theme-btn { background:#555; color:#fff; }
+  #voice-btn { background:#f90; color:#000; }
+  .msg { margin:10px 0; }
+  .user { text-align:right; }
+  .jarvis { text-align:left; }
+  #theme-options { display:none; position:absolute; bottom:50px; left:10px; background:#111; padding:10px; border:1px solid #0ff; max-width:150px; z-index:10; }
+  #theme-options div { margin:5px; cursor:pointer; padding:3px; border-radius:3px; }
+  #theme-options div:hover { background:#333; }
+</style>
+</head>
+<body>
+
+<div id="chat"></div>
+
+<div id="input-container">
+  <input id="user-input" placeholder="Bir şey yaz..." autocomplete="off">
+  <button id="send-btn">Gönder</button>
+  <button id="theme-btn">Tema</button>
+  <button id="voice-btn">Ses Aç/Kapat</button>
+  <div id="theme-options">
+    <div data-color="#0ff">Mavi</div>
+    <div data-color="#f0f">Mor</div>
+    <div data-color="#0f0">Yeşil</div>
+    <div data-color="#ff0">Sarı</div>
+    <div data-color="#ffa500">Turuncu</div>
+    <div data-color="#f00">Kırmızı</div>
+    <div data-color="#00f">Açık Mavi</div>
+    <div data-color="#fff">Beyaz</div>
+    <div data-color="#0a0a0a">Siyah</div>
+    <div data-color="#ff1493">Pembe</div>
+  </div>
+</div>
+
+<script>
+let chat = document.getElementById("chat");
+let input = document.getElementById("user-input");
+let btn = document.getElementById("send-btn");
+let themeBtn = document.getElementById("theme-btn");
+let voiceBtn = document.getElementById("voice-btn");
+let themeOptions = document.getElementById("theme-options");
+let msgColor = "#0ff";
+let memory = [];
+let speechEnabled = true;
+
+// Kullanıcı adı ve yaş
+let userName = localStorage.getItem("userName");
+let userAge = localStorage.getItem("userAge");
+if(!userName || !userAge){
+  userName = prompt("Adınız nedir?");
+  userAge = prompt("Kaç yaşındasınız?");
+  localStorage.setItem("userName",userName);
+  localStorage.setItem("userAge",userAge);
+}
+
+// Mesaj ekleme + erkek sesi
+function addMessage(content,sender="jarvis"){
+  const msg = document.createElement("div");
+  msg.className = `msg ${sender}`;
+  msg.style.color = msgColor;
+  msg.innerHTML = content.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank">$1</a>');
+  chat.appendChild(msg);
+  chat.scrollTop = chat.scrollHeight;
+
+  if(sender==="jarvis" && speechEnabled && 'speechSynthesis' in window){
+    let utterance = new SpeechSynthesisUtterance(content);
+    utterance.rate = 1;   // konuşma hızı
+    utterance.pitch = 0.8; // daha kalın (erkek) ton
+    speechSynthesis.speak(utterance);
+  }
+}
+
+// Ses aç/kapat
+voiceBtn.addEventListener("click", ()=> {
+  speechEnabled = !speechEnabled;
+  addMessage(speechEnabled ? "Ses açıldı 🔊" : "Ses kapandı 🔇");
+});
+
+// Tema seçme
+themeBtn.addEventListener("click", ()=> themeOptions.style.display = themeOptions.style.display==="none"?"block":"none");
+themeOptions.querySelectorAll("div").forEach(d=>{
+  d.addEventListener("click", ()=>{
+    msgColor = d.getAttribute("data-color");
+    document.querySelectorAll(".msg").forEach(msg=> msg.style.color = msgColor);
+    themeOptions.style.display="none";
+  });
+});
+
+// Wikipedia (Türkçe)
+async function fetchWikipedia(query){
+  const apiUrl=`https://tr.wikipedia.org/w/api.php?action=query&format=json&origin=*&prop=extracts&exintro=true&explaintext=true&titles=${encodeURIComponent(query)}`;
+  const res=await fetch(apiUrl);
+  const data=await res.json();
+  const pages=Object.values(data.query.pages);
+  return pages[0].extract || "Maalesef bu konu hakkında bilgi bulunamadı.";
+}
+
+// Yapay zekâ + önceden eklenmiş sohbet, fal, zar, yazı-tura, şaka vb.
+async function aiResponse(userMessage){
+  memory.push({sender:"user",text:userMessage});
+  const lower = userMessage.toLowerCase();
+
+  // SELAM
+  const greetings = ["selam","merhaba","naber","günaydın","iyi akşamlar"];
+  if(greetings.some(g=>lower.includes(g))) return `Selam ${userName}! Nasılsın bugün?`;
+
+  // NASILSIN + İYİYİM SEN
+  if(lower.includes("nasılsın")) return "Ben iyiyim, sen nasılsın?";
+  if(lower.includes("iyiyim sen") || lower.includes("bende iyiyim")) return "Güzel! 😊";
+
+  // MÜZİK
+  if(lower.includes("müzik aç") || lower.includes("müzik öner")){
+    const musics = [
+      "I'm Blue - Eiffel 65",
+      "Barış Manço - Gülpembe",
+      "Barış Manço - Halil İbrahim Sofrası",
+      "Barış Manço - Lambaya Püf De",
+      "Barış Manço - Dağlar Dağlar"
+    ];
+    return `Bence şunu dinlemelisin: ${musics[Math.floor(Math.random()*musics.length)]}`;
+  }
+
+  // Matematik
+  if(/^[0-9+\-*/\s().]+$/.test(lower)){
+    try {  
+      let result = eval(lower);  
+      return `Sonuç: ${result}`;  
+    } catch { return "Bu işlemi yapamadım 😕"; }
+  }
+
+  // Zar
+  if(lower.includes("zar at")) return `Zar sonucu: 🎲 ${Math.floor(Math.random()*6)+1}`;
+
+  // Yazı Tura
+  if(lower.includes("yazı tura")) return Math.random() > 0.5 ? "Yazı geldi 🪙" : "Tura geldi 🪙";
+
+  // Fal
+  if(lower.includes("fal bak")){
+    const fortunes = [
+      "Yakında güzel bir sürpriz seni bekliyor ✨",
+      "Yeni biriyle tanışacaksın 👀",
+      "Şansın çok açık görünüyor 🍀",
+      "Bugün biraz dikkatli ol, önemli bir şey olabilir."
+    ];
+    return fortunes[Math.floor(Math.random()*fortunes.length)];
+  }
+
+  // Wikipedia
+  if(lower.includes("atatürk") || lower.includes("türkiye")) return await fetchWikipedia(lower);
+
+  // Google link
+  if(lower.includes("ara ")){
+    const query = encodeURIComponent(userMessage.replace("ara ",""));
+    return `Google'da buldum: <a href="https://www.google.com/search?q=${query}" target="_blank">https://www.google.com/search?q=${query}</a>`;
+  }
+
+  // Genel sohbet ve şakalar
+  const friendlyReplies = [
+    "Bunu düşündüm ve ilginç buldum.",
+    "Seninle konuşmak güzel.",
+    "Hmm, bunu biraz daha açabilir misin?",
+    "Seninle sohbet etmek keyifli!",
+    "😂 Haha, çok komik!",
+    "Hmm, ilginç bir konu.",
+    "Bunu daha önce duymamıştım.",
+    "Harika bir fikir!"
+  ];
+  
+  // Backend üzerinden OpenAI
+  try {
+    const res = await fetch("http://localhost:5000/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: userMessage })
+    });
+    const data = await res.json();
+    return data.reply || friendlyReplies[Math.floor(Math.random()*friendlyReplies.length)];
+  } catch {
+    return friendlyReplies[Math.floor(Math.random()*friendlyReplies.length)];
+  }
+}
+
+// Mesaj gönder
+btn.addEventListener("click", async ()=>{
+  const text=input.value.trim();
+  if(text){
+    addMessage(text,"user");
+    const response = await aiResponse(text);
+    setTimeout(()=> addMessage(response,"jarvis"), 600);
+    input.value="";
+  }
+});
+input.addEventListener("keydown", e=>{ if(e.key==="Enter") btn.click(); });
+
+// Hoş geldin
+setTimeout(()=> addMessage(`Hoş geldiniz ${userName}, size nasıl yardımcı olabilirim?`),500);
+</script>
+
+</body>
+</html>
